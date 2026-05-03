@@ -3,11 +3,15 @@ import {
   LayoutDashboard, MessageSquare, BookOpen, 
   Gamepad2, Settings, Globe, LogOut, User 
 } from 'lucide-react';
+import React, { memo } from 'react';
 import { auth } from '../firebase';
+import { translations } from '../utils/translations';
 import VoterChecklist from '../components/VoterChecklist';
 import './Sidebar.css';
 
-export default function Sidebar({ user, language, setLanguage, setShowSettings }) {
+const Sidebar = memo(({ user, language, setLanguage, setShowSettings }) => {
+  const t = translations[language] || translations.English;
+  
   const handleLogout = () => {
     if (window.confirm('Are you sure you want to logout?')) {
       auth.signOut();
@@ -26,19 +30,19 @@ export default function Sidebar({ user, language, setLanguage, setShowSettings }
       <nav className="sidebar-nav">
         <NavLink to="/" className={({isActive}) => isActive ? 'nav-item active' : 'nav-item'}>
           <LayoutDashboard size={20} />
-          <span>Dashboard</span>
+          <span>{t.dashboard}</span>
         </NavLink>
         <NavLink to="/assistant" className={({isActive}) => isActive ? 'nav-item active' : 'nav-item'}>
           <MessageSquare size={20} />
-          <span>AI Assistant</span>
+          <span>{t.assistant}</span>
         </NavLink>
         <NavLink to="/practice" className={({isActive}) => isActive ? 'nav-item active' : 'nav-item'}>
           <Gamepad2 size={20} />
-          <span>Practice Center</span>
+          <span>{t.practice}</span>
         </NavLink>
         <NavLink to="/resources" className={({isActive}) => isActive ? 'nav-item active' : 'nav-item'}>
           <BookOpen size={20} />
-          <span>Resource Hub</span>
+          <span>{t.resources}</span>
         </NavLink>
       </nav>
 
@@ -60,7 +64,7 @@ export default function Sidebar({ user, language, setLanguage, setShowSettings }
         </div>
         <button className="settings-btn" onClick={() => setShowSettings(true)}>
           <Settings size={20} />
-          <span>API Settings</span>
+          <span>{t.settings}</span>
         </button>
         
         <div className="user-profile">
@@ -71,11 +75,13 @@ export default function Sidebar({ user, language, setLanguage, setShowSettings }
             <span className="user-name">{user.isAnonymous ? 'Demo User' : user.email.split('@')[0]}</span>
             <span className="user-status">Online</span>
           </div>
-          <button className="logout-btn" onClick={handleLogout} title="Logout">
+          <button className="logout-btn" onClick={handleLogout} title={t.logout}>
             <LogOut size={18} />
           </button>
         </div>
       </div>
     </aside>
   );
-}
+});
+
+export default Sidebar;

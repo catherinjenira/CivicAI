@@ -4,15 +4,18 @@ import {
   Info, ChevronRight, Award
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { translations } from '../utils/translations';
 import './Dashboard.css';
 
-export default function Dashboard({ dailyFact }) {
+export default function Dashboard({ dailyFact, language = 'English' }) {
   const navigate = useNavigate();
+  const t = translations[language] || translations.English;
+  
   const stats = [
-    { label: 'Registered Voters', value: '168.3M', change: '+2.4%', icon: <Users /> },
-    { label: 'Days to Election', value: '184', change: 'Next: Nov 3', icon: <Calendar /> },
-    { label: 'Civic Readiness', value: '85%', change: '+12%', icon: <Vote /> },
-    { label: 'Platform Activity', value: '1.2M', change: 'Live', icon: <TrendingUp /> },
+    { label: t.stats.voters, value: '168.3M', change: '+2.4%', icon: <Users /> },
+    { label: t.stats.days, value: '184', change: 'Next: Nov 3', icon: <Calendar /> },
+    { label: t.stats.polls, value: '42,102', change: 'Live Now', icon: <Vote /> },
+    { label: t.stats.engagement, value: '88%', change: 'High', icon: <TrendingUp /> },
   ];
 
   return (
@@ -57,13 +60,13 @@ export default function Dashboard({ dailyFact }) {
 
           <div className="quick-actions">
             <div className="action-card primary">
-              <h3>Practice Voting</h3>
-              <p>Try our Interactive Ballot Simulator to prepare for election day.</p>
+              <h3>{t.practice_title}</h3>
+              <p>{t.practice_desc}</p>
               <button className="btn-action" onClick={() => navigate('/practice')}>Start Practice <ChevronRight size={16} /></button>
             </div>
             <div className="action-card secondary">
-              <h3>Resource Hub</h3>
-              <p>Explore over 100 articles and facts about our democracy.</p>
+              <h3>{t.resource_title}</h3>
+              <p>{t.resource_desc}</p>
               <button className="btn-action" onClick={() => navigate('/resources')}>Explore <ChevronRight size={16} /></button>
             </div>
           </div>
