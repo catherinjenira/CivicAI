@@ -93,11 +93,11 @@ export default function App() {
     const userMsg = { id: Date.now(), role: 'user', text };
     const chatRef = ref(db, `chats/${user.uid}`);
     
+    setMessages(prev => [...prev, userMsg]);
     try {
       push(chatRef, userMsg);
     } catch (fbError) {
-      console.warn('Firebase push failed, updating local state only:', fbError);
-      setMessages(prev => [...prev, userMsg]);
+      console.warn('Firebase push failed');
     }
 
     setIsLoading(true);
@@ -118,22 +118,17 @@ export default function App() {
       const result = await chat.sendMessage(fullPrompt);
       
       const aiMsg = { id: Date.now() + 1, role: 'model', text: result.response.text() };
+      setMessages(prev => [...prev, aiMsg]);
       
-      // Try to sync with Firebase, but don't fail if permissions are denied
       try {
         push(chatRef, aiMsg);
       } catch (fbError) {
-        console.warn('Firebase push failed, updating local state only:', fbError);
-        setMessages(prev => [...prev, aiMsg]);
+        console.warn('Firebase push failed');
       }
     } catch (error) {
-      setTimeout(() => {
-        const mockText = getMockResponse(text);
-        const fallbackMsg = { id: Date.now() + 1, role: 'model', text: mockText };
-        push(chatRef, fallbackMsg);
-        setIsLoading(false);
-      }, 1000);
-      return;
+      const mockText = getMockResponse(text);
+      const fallbackMsg = { id: Date.now() + 1, role: 'model', text: mockText };
+      setMessages(prev => [...prev, fallbackMsg]);
     } finally {
       setIsLoading(false);
     }
@@ -207,6 +202,7 @@ export default function App() {
             } />
             <Route path="/practice" element={<Practice />} />
             <Route path="/resources" element={<Resources />} />
+            <Route path="/login" element={<Login />} />
           </Routes>
         </main>
 

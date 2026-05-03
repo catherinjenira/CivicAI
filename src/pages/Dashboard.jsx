@@ -3,9 +3,11 @@ import {
   Users, Calendar, Vote, TrendingUp, 
   Info, ChevronRight, Award
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
 
 export default function Dashboard({ dailyFact }) {
+  const navigate = useNavigate();
   const stats = [
     { label: 'Registered Voters', value: '168.3M', change: '+2.4%', icon: <Users /> },
     { label: 'Days to Election', value: '184', change: 'Next: Nov 3', icon: <Calendar /> },
@@ -57,12 +59,12 @@ export default function Dashboard({ dailyFact }) {
             <div className="action-card primary">
               <h3>Practice Voting</h3>
               <p>Try our Interactive Ballot Simulator to prepare for election day.</p>
-              <button className="btn-action">Start Practice <ChevronRight size={16} /></button>
+              <button className="btn-action" onClick={() => navigate('/practice')}>Start Practice <ChevronRight size={16} /></button>
             </div>
             <div className="action-card secondary">
               <h3>Resource Hub</h3>
               <p>Explore over 100 articles and facts about our democracy.</p>
-              <button className="btn-action">Explore <ChevronRight size={16} /></button>
+              <button className="btn-action" onClick={() => navigate('/resources')}>Explore <ChevronRight size={16} /></button>
             </div>
           </div>
         </div>
