@@ -9,6 +9,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import VoterChecklist from './components/VoterChecklist';
 import BallotSimulator from './components/BallotSimulator';
+import { getMockResponse } from './mockData';
 import './App.css';
 
 const SYSTEM_INSTRUCTION = `You are CivicAI, a smart, dynamic assistant dedicated to election process education. 
@@ -29,6 +30,7 @@ function App() {
   const [dailyFact, setDailyFact] = useState('');
   const [language, setLanguage] = useState('English');
   const [showSimulator, setShowSimulator] = useState(false);
+  const [modelName, setModelName] = useState('models/gemini-1.5-flash');
   
   const chatContainerRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -71,7 +73,7 @@ function App() {
   const fetchDailyFact = async (key) => {
     try {
       const genAI = new GoogleGenerativeAI(key);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = genAI.getGenerativeModel({ model: modelName });
       const prompt = "Provide one short, fascinating, and neutral fact about the election process or voting history. Keep it under 100 characters.";
       const result = await model.generateContent(prompt);
       setDailyFact(result.response.text());
@@ -120,13 +122,7 @@ function App() {
 
     try {
       const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ 
-        model: 'gemini-1.5-flash',
-        systemInstruction: {
-          role: 'system',
-          parts: [{ text: `${SYSTEM_INSTRUCTION}\nIMPORTANT: Please respond strictly in ${language}.` }],
-        }
-      });
+      const model = genAI.getGenerativeModel({ model: modelName });
 
       // Prepare chat history
       const history = messages.map(msg => ({
@@ -138,23 +134,21 @@ function App() {
         history: history,
       });
 
-      const result = await chat.sendMessage(text);
+      const fullPrompt = `[SYSTEM INSTRUCTION: ${SYSTEM_INSTRUCTION}\nIMPORTANT: Please respond strictly in ${language}.]\n\nUser Question: ${text}`;
+      const result = await chat.sendMessage(fullPrompt);
       const responseText = result.response.text();
 
       const newAiMessage = { id: Date.now() + 1, role: 'model', text: responseText };
       setMessages((prev) => [...prev, newAiMessage]);
     } catch (error) {
-      console.error('Error calling Gemini API:', error);
-      const errorMessage = { 
+      console.error('Error calling Gemini API, falling back to mock:', error);
+      const mockText = getMockResponse(text);
+      const fallbackMessage = { 
         id: Date.now() + 1, 
         role: 'model', 
-        text: `**Error:** I couldn't process that request. Please check your API key and try again.\n\n*Details: ${error.message}*` 
+        text: `*(CivicAI Offline Fallback)*\n\n${mockText}\n\n*Note: To get advanced AI responses, please configure a working Gemini API key.*` 
       };
-      setMessages((prev) => [...prev, errorMessage]);
-      
-      if (error.message.includes('API key')) {
-        setShowSettings(true);
-      }
+      setMessages((prev) => [...prev, fallbackMessage]);
     } finally {
       setIsLoading(false);
     }
@@ -381,6 +375,21 @@ function App() {
                 </a>
               </p>
             </div>
+
+            <div className="form-group">
+              <label className="form-label">Model Selection</label>
+              <select 
+                className="form-input" 
+                value={modelName} 
+                onChange={(e) => setModelName(e.target.value)}
+              >
+                <option value="models/gemini-1.5-flash">gemini-1.5-flash (Fastest)</option>
+                <option value="models/gemini-1.5-pro">gemini-1.5-pro (Advanced)</option>
+                <option value="models/gemini-1.5-flash-latest">gemini-1.5-flash-latest</option>
+                <option value="models/gemini-pro">gemini-pro (Legacy)</option>
+              </select>
+              <p className="form-text">Try different models if you encounter 404 errors.</p>
+            </div>
             
             <button 
               className="btn-primary"
@@ -390,6 +399,13 @@ function App() {
               }}
             >
               Save & Continue
+            </button>
+            <button 
+              className="settings-btn" 
+              style={{marginTop: '1rem', justifyContent: 'center'}}
+              onClick={() => setShowSettings(false)}
+            >
+              Use Offline Mode
             </button>
           </motion.div>
         </div>
