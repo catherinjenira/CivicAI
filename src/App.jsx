@@ -149,7 +149,7 @@ function App() {
         const fallbackMessage = { 
           id: Date.now() + 1, 
           role: 'model', 
-          text: `*(CivicAI Offline Fallback)*\n\n${mockText}\n\n*Note: To get advanced AI responses, please configure a working Gemini API key.*` 
+          text: mockText 
         };
         setMessages((prev) => [...prev, fallbackMessage]);
         setIsLoading(false);
