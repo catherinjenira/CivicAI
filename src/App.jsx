@@ -4,9 +4,11 @@ import ReactMarkdown from 'react-markdown';
 import { 
   Send, Bot, User, Menu, X, Settings, PlusCircle, 
   MessageSquare, FileText, MapPin, CheckSquare, Key,
-  Mic, MicOff, Info
+  Mic, MicOff, Info, Globe, Play
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import VoterChecklist from './components/VoterChecklist';
+import BallotSimulator from './components/BallotSimulator';
 import './App.css';
 
 const SYSTEM_INSTRUCTION = `You are CivicAI, a smart, dynamic assistant dedicated to election process education. 
@@ -25,6 +27,8 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [dailyFact, setDailyFact] = useState('');
+  const [language, setLanguage] = useState('English');
+  const [showSimulator, setShowSimulator] = useState(false);
   
   const chatContainerRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -120,7 +124,7 @@ function App() {
         model: 'gemini-1.5-flash',
         systemInstruction: {
           role: 'system',
-          parts: [{ text: SYSTEM_INSTRUCTION }],
+          parts: [{ text: `${SYSTEM_INSTRUCTION}\nIMPORTANT: Please respond strictly in ${language}.` }],
         }
       });
 
@@ -199,11 +203,27 @@ function App() {
               </button>
             ))}
           </div>
+
+          <h3 className="sidebar-section-title" style={{marginTop: '1.5rem'}}>Interactive Learning</h3>
+          <button className="prompt-btn" onClick={() => { setShowSimulator(true); setSidebarOpen(false); }}>
+            <Play size={18} />
+            <span>Ballot Simulator</span>
+          </button>
           
           <VoterChecklist />
         </div>
 
         <div className="sidebar-footer">
+          <div className="lang-selector">
+            <Globe size={18} />
+            <select value={language} onChange={(e) => setLanguage(e.target.value)}>
+              <option value="English">English</option>
+              <option value="Spanish">Español</option>
+              <option value="Hindi">हिन्दी</option>
+              <option value="French">Français</option>
+              <option value="Arabic">العربية</option>
+            </select>
+          </div>
           <button className="settings-btn" onClick={() => setShowSettings(true)}>
             <Settings size={20} />
             <span>API Settings</span>
@@ -328,7 +348,11 @@ function App() {
       {/* Settings Modal */}
       {showSettings && (
         <div className="modal-overlay">
-          <div className="modal-content fade-in">
+          <motion.div 
+            className="modal-content"
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+          >
             <div className="modal-header">
               <h2 className="modal-title">
                 <Key size={24} color="var(--primary)" />
@@ -367,9 +391,16 @@ function App() {
             >
               Save & Continue
             </button>
-          </div>
+          </motion.div>
         </div>
       )}
+
+      {/* Ballot Simulator Modal */}
+      <AnimatePresence>
+        {showSimulator && (
+          <BallotSimulator onClose={() => setShowSimulator(false)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
