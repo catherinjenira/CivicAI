@@ -1,74 +1,63 @@
 import { useState, useEffect, useRef } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import ReactMarkdown from 'react-markdown';
 import { 
-  Send, Bot, User, Menu, X, Settings, PlusCircle, 
-  MessageSquare, FileText, MapPin, CheckSquare, Key,
-  Mic, MicOff, Info, Globe, Play
+  X, Settings, Key, Globe, LayoutDashboard, 
+  MessageSquare, BookOpen, Gamepad2 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import VoterChecklist from './components/VoterChecklist';
-import BallotSimulator from './components/BallotSimulator';
+
+// Firebase
+import { db } from './firebase';
+import { ref, push, onValue, set } from 'firebase/database';
+
+// Layout & Pages
+import Sidebar from './layouts/Sidebar';
+import Dashboard from './pages/Dashboard';
+import Assistant from './pages/Assistant';
+import Practice from './pages/Practice';
+import Resources from './pages/Resources';
+
+// Components & Utils
 import { getMockResponse } from './mockData';
 import './App.css';
 
 const SYSTEM_INSTRUCTION = `You are CivicAI, a smart, dynamic assistant dedicated to election process education. 
-Your goal is to guide users (like first-time voters, general citizens) through the election process neutrally and objectively.
-Help them understand voter registration, polling station procedures, ballot understanding, and counting mechanics.
-Always provide clear, accessible, and factual information. Avoid political bias, endorsing candidates, or discussing political opinions. 
-Focus strictly on the *process* of elections, voting rights, and civic duties.
-Use clear formatting, bullet points, and concise explanations.`;
+Your goal is to provide non-partisan, factual, and neutral information about voting, registration, and civic duties.
+Always encourage civic participation without favoring any specific party or candidate.`;
 
-function App() {
+export default function App() {
+  const [apiKey, setApiKey] = useState(localStorage.getItem('VITE_GEMINI_API_KEY') || '');
+  const [showSettings, setShowSettings] = useState(!localStorage.getItem('VITE_GEMINI_API_KEY'));
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [apiKey, setApiKey] = useState('');
-  const [showSettings, setShowSettings] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [dailyFact, setDailyFact] = useState('');
   const [language, setLanguage] = useState('English');
-  const [showSimulator, setShowSimulator] = useState(false);
   const [modelName, setModelName] = useState('models/gemini-1.5-flash');
-  
-  const chatContainerRef = useRef(null);
+
   const recognitionRef = useRef(null);
 
   useEffect(() => {
-    const envKey = import.meta.env.VITE_GEMINI_API_KEY;
-    const savedKey = localStorage.getItem('gemini_api_key');
-    
-    let activeKey = '';
-    if (envKey) {
-      activeKey = envKey;
-      setApiKey(envKey);
-    } else if (savedKey) {
-      activeKey = savedKey;
-      setApiKey(savedKey);
-    } else {
-      setShowSettings(true);
+    if (apiKey) {
+      fetchDailyFact(apiKey);
+      syncMessagesWithFirebase();
     }
+  }, [apiKey]);
 
-    if (activeKey) {
-      fetchDailyFact(activeKey);
-    }
-
-    // Initialize Speech Recognition
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = false;
-      recognitionRef.current.interimResults = false;
-      recognitionRef.current.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        setInput(transcript);
-        setIsListening(false);
-      };
-      recognitionRef.current.onerror = () => setIsListening(false);
-      recognitionRef.current.onend = () => setIsListening(false);
-    }
-  }, []);
+  const syncMessagesWithFirebase = () => {
+    const chatRef = ref(db, 'chats/user1'); // Using static ID for demo
+    onValue(chatRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const messageList = Object.keys(data).map(key => ({
+          id: key,
+          ...data[key]
+        }));
+        setMessages(messageList);
+      }
+    });
+  };
 
   const fetchDailyFact = async (key) => {
     try {
@@ -77,355 +66,151 @@ function App() {
       const prompt = "Provide one short, fascinating, and neutral fact about the election process or voting history. Keep it under 100 characters.";
       const result = await model.generateContent(prompt);
       setDailyFact(result.response.text());
-    } catch (e) {
-      console.error("Fact fetch failed", e);
+    } catch (error) {
+      console.error('Fact fetch failed:', error);
+      setDailyFact("In Ancient Greece, citizens used broken pottery to vote.");
+    }
+  };
+
+  const handleSend = async (text) => {
+    if (!text.trim()) return;
+
+    const userMsg = { id: Date.now(), role: 'user', text };
+    const chatRef = ref(db, 'chats/user1');
+    push(chatRef, userMsg);
+
+    setIsLoading(true);
+
+    try {
+      if (!apiKey) throw new Error("No API key");
+      
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: modelName });
+
+      const history = messages.map(msg => ({
+        role: msg.role === 'user' ? 'user' : 'model',
+        parts: [{ text: msg.text }],
+      }));
+
+      const chat = model.startChat({ history });
+      const fullPrompt = `[SYSTEM: ${SYSTEM_INSTRUCTION} Respond in ${language}.]\n\nUser: ${text}`;
+      const result = await chat.sendMessage(fullPrompt);
+      
+      const aiMsg = { id: Date.now() + 1, role: 'model', text: result.response.text() };
+      push(chatRef, aiMsg);
+    } catch (error) {
+      setTimeout(() => {
+        const mockText = getMockResponse(text);
+        const fallbackMsg = { id: Date.now() + 1, role: 'model', text: mockText };
+        push(chatRef, fallbackMsg);
+        setIsLoading(false);
+      }, 1000);
+      return;
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const toggleListening = () => {
     if (isListening) {
       recognitionRef.current?.stop();
-    } else {
-      setIsListening(true);
-      recognitionRef.current?.start();
-    }
-  };
-
-  useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
-  }, [messages, isLoading]);
-
-  const handleSaveApiKey = (key) => {
-    setApiKey(key);
-    localStorage.setItem('gemini_api_key', key);
-    setShowSettings(false);
-  };
-
-  const startNewChat = () => {
-    setMessages([]);
-    setSidebarOpen(false);
-  };
-
-  const handleSend = async (text = input) => {
-    if (!text.trim()) return;
-    if (!apiKey) {
-      setShowSettings(true);
+      setIsListening(false);
       return;
     }
 
-    const newUserMessage = { id: Date.now(), role: 'user', text };
-    setMessages((prev) => [...prev, newUserMessage]);
-    setInput('');
-    setIsLoading(true);
-
-    try {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: modelName });
-
-      // Prepare chat history
-      const history = messages.map(msg => ({
-        role: msg.role === 'user' ? 'user' : 'model',
-        parts: [{ text: msg.text }],
-      }));
-
-      const chat = model.startChat({
-        history: history,
-      });
-
-      const fullPrompt = `[SYSTEM INSTRUCTION: ${SYSTEM_INSTRUCTION}\nIMPORTANT: Please respond strictly in ${language}.]\n\nUser Question: ${text}`;
-      const result = await chat.sendMessage(fullPrompt);
-      const responseText = result.response.text();
-
-      const newAiMessage = { id: Date.now() + 1, role: 'model', text: responseText };
-      setMessages((prev) => [...prev, newAiMessage]);
-    } catch (error) {
-      console.error('Error calling Gemini API, falling back to mock:', error);
-      
-      // Simulate AI thinking time even in mock mode
-      setTimeout(() => {
-        const mockText = getMockResponse(text);
-        const fallbackMessage = { 
-          id: Date.now() + 1, 
-          role: 'model', 
-          text: mockText 
-        };
-        setMessages((prev) => [...prev, fallbackMessage]);
-        setIsLoading(false);
-      }, 1000);
-      return; // Prevent isLoading from being set to false immediately
-    } finally {
-      // Only set to false here if the try block succeeded. 
-      // If catch block runs, setTimeout handles it.
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Speech recognition is not supported in this browser.");
+      return;
     }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      handleSend(transcript);
+    };
+    recognition.onend = () => setIsListening(false);
+    
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
   };
 
-  const quickPrompts = [
-    { icon: <FileText size={18} />, text: "How do I register to vote?" },
-    { icon: <MapPin size={18} />, text: "How do I find my polling station?" },
-    { icon: <CheckSquare size={18} />, text: "What ID do I need on election day?" },
-    { icon: <MessageSquare size={18} />, text: "Explain the ballot counting process." },
-  ];
+  const handleSaveApiKey = (key) => {
+    setApiKey(key);
+    localStorage.setItem('VITE_GEMINI_API_KEY', key);
+    setShowSettings(false);
+  };
 
   return (
-    <div className="app-container">
-      {/* Sidebar */}
-      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
-        <div className="sidebar-header">
-          <div className="logo-icon">
-            <Bot size={24} />
-          </div>
-          <span className="sidebar-title">CivicAI</span>
-          <button className="menu-btn" aria-label="Close menu" onClick={() => setSidebarOpen(false)} style={{marginLeft: 'auto'}}>
-            <X size={24} />
-          </button>
-        </div>
+    <Router>
+      <div className="app-shell">
+        <Sidebar 
+          language={language} 
+          setLanguage={setLanguage} 
+          setShowSettings={setShowSettings} 
+        />
         
-        <div className="sidebar-content">
-          <button className="new-chat-btn" onClick={startNewChat}>
-            <PlusCircle size={20} />
-            New Conversation
-          </button>
-          
-          <h3 className="sidebar-section-title">Quick Topics</h3>
-          <div className="quick-prompts">
-            {quickPrompts.map((prompt, index) => (
-              <button 
-                key={index} 
-                className="prompt-btn"
-                onClick={() => {
-                  handleSend(prompt.text);
-                  setSidebarOpen(false);
-                }}
+        <main className="app-main">
+          <Routes>
+            <Route path="/" element={<Dashboard dailyFact={dailyFact} />} />
+            <Route path="/assistant" element={
+              <Assistant 
+                apiKey={apiKey}
+                modelName={modelName}
+                language={language}
+                handleSend={handleSend}
+                messages={messages}
+                setMessages={setMessages}
+                isLoading={isLoading}
+                isListening={isListening}
+                toggleListening={toggleListening}
+              />
+            } />
+            <Route path="/practice" element={<Practice />} />
+            <Route path="/resources" element={<Resources />} />
+          </Routes>
+        </main>
+
+        <AnimatePresence>
+          {showSettings && (
+            <div className="modal-overlay">
+              <motion.div 
+                className="modal-content"
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
               >
-                {prompt.icon}
-                <span>{prompt.text}</span>
-              </button>
-            ))}
-          </div>
+                <div className="modal-header">
+                  <h2 className="modal-title"><Key size={24} color="var(--primary)" /> API Config</h2>
+                  {apiKey && <button className="close-btn" onClick={() => setShowSettings(false)}><X size={24} /></button>}
+                </div>
+                
+                <div className="form-group">
+                  <label className="form-label">Gemini API Key</label>
+                  <input type="password" id="api-key-input" className="form-input" defaultValue={apiKey} placeholder="AIzaSy..." />
+                </div>
 
-          <h3 className="sidebar-section-title" style={{marginTop: '1.5rem'}}>Interactive Learning</h3>
-          <button className="prompt-btn" onClick={() => { setShowSimulator(true); setSidebarOpen(false); }}>
-            <Play size={18} />
-            <span>Ballot Simulator</span>
-          </button>
-          
-          <VoterChecklist />
-        </div>
-
-        <div className="sidebar-footer">
-          <div className="lang-selector">
-            <Globe size={18} />
-            <select value={language} onChange={(e) => setLanguage(e.target.value)}>
-              <option value="English">English</option>
-              <option value="Spanish">Español</option>
-              <option value="Hindi">हिन्दी</option>
-              <option value="French">Français</option>
-              <option value="Arabic">العربية</option>
-            </select>
-          </div>
-          <button className="settings-btn" onClick={() => setShowSettings(true)}>
-            <Settings size={20} />
-            <span>API Settings</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="main-content">
-        <header className="header">
-          <button className="menu-btn" aria-label="Open menu" onClick={() => setSidebarOpen(true)}>
-            <Menu size={24} />
-          </button>
-          {!sidebarOpen && <span className="sidebar-title" style={{ display: 'none' }} >CivicAI</span>}
-        </header>
-
-        <div className="chat-container" ref={chatContainerRef}>
-          {messages.length === 0 ? (
-            <div className="welcome-screen fade-in">
-              <div className="welcome-icon">
-                <Bot size={48} />
-              </div>
-              <h1 className="welcome-title">Welcome to CivicAI</h1>
-              {dailyFact && (
-                <div className="daily-fact fade-in">
-                  <Info size={16} />
-                  <span><strong>Fact of the Day:</strong> {dailyFact}</span>
+                <div className="form-group">
+                  <label className="form-label">Model Selection</label>
+                  <select className="form-input" value={modelName} onChange={(e) => setModelName(e.target.value)}>
+                    <option value="models/gemini-1.5-flash">gemini-1.5-flash (Fast)</option>
+                    <option value="models/gemini-pro">gemini-pro (Stable)</option>
+                  </select>
                 </div>
-              )}
-              <p className="welcome-subtitle">
-                Your smart, unbiased guide to understanding the election process, voter rights, and civic duties.
-              </p>
-              
-              <div className="feature-grid">
-                <div className="feature-card">
-                  <FileText className="feature-icon" size={32} />
-                  <h3 className="feature-title">Voter Registration</h3>
-                  <p className="feature-desc">Learn how to register, check your status, and update your information securely.</p>
-                </div>
-                <div className="feature-card">
-                  <MapPin className="feature-icon" size={32} />
-                  <h3 className="feature-title">Polling Stations</h3>
-                  <p className="feature-desc">Understand how polling locations are assigned and what to expect when you arrive.</p>
-                </div>
-                <div className="feature-card">
-                  <CheckSquare className="feature-icon" size={32} />
-                  <h3 className="feature-title">The Ballot</h3>
-                  <p className="feature-desc">Discover how to read and fill out your ballot correctly to ensure your vote counts.</p>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="messages-list">
-              {messages.map((msg) => (
-                <div key={msg.id} className={`message-wrapper fade-in ${msg.role === 'model' ? 'ai' : ''}`}>
-                  <div className="message-content">
-                    <div className={`avatar ${msg.role === 'model' ? 'ai' : 'user'}`}>
-                      {msg.role === 'model' ? <Bot size={20} /> : <User size={20} />}
-                    </div>
-                    <div className="message-body markdown-body">
-                      {msg.role === 'model' ? (
-                        <ReactMarkdown>{msg.text}</ReactMarkdown>
-                      ) : (
-                        <p>{msg.text}</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {isLoading && (
-                <div className="message-wrapper ai fade-in">
-                  <div className="message-content">
-                    <div className="avatar ai">
-                      <Bot size={20} />
-                    </div>
-                    <div className="message-body">
-                      <div className="typing-indicator">
-                        <span></span><span></span><span></span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+                
+                <button className="btn-primary" onClick={() => handleSaveApiKey(document.getElementById('api-key-input').value)}>
+                  Save & Continue
+                </button>
+                <button className="settings-btn" style={{marginTop: '1rem', width: '100%', justifyContent: 'center'}} onClick={() => setShowSettings(false)}>
+                  Skip for Offline Mode
+                </button>
+              </motion.div>
             </div>
           )}
-        </div>
-
-        <div className="input-area">
-          <div className="input-container">
-            <textarea
-              className="chat-input"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              placeholder="Ask about the election process..."
-              rows={1}
-            />
-            <button 
-              className={`mic-btn ${isListening ? 'listening' : ''}`}
-              aria-label={isListening ? "Stop listening" : "Start voice input"}
-              onClick={toggleListening}
-            >
-              {isListening ? <MicOff size={20} /> : <Mic size={20} />}
-            </button>
-            <button 
-              className="send-btn" 
-              aria-label="Send message"
-              onClick={() => handleSend()}
-              disabled={!input.trim() || isLoading}
-            >
-              {isLoading ? <span className="loader"></span> : <Send size={20} />}
-            </button>
-          </div>
-        </div>
-      </main>
-
-      {/* Settings Modal */}
-      {showSettings && (
-        <div className="modal-overlay">
-          <motion.div 
-            className="modal-content"
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-          >
-            <div className="modal-header">
-              <h2 className="modal-title">
-                <Key size={24} color="var(--primary)" />
-                Configuration
-              </h2>
-              {apiKey && (
-                <button className="close-btn" aria-label="Close settings" onClick={() => setShowSettings(false)}>
-                  <X size={24} />
-                </button>
-              )}
-            </div>
-            
-            <div className="form-group">
-              <label className="form-label">Google Gemini API Key</label>
-              <input
-                type="password"
-                className="form-input"
-                placeholder="AIzaSy..."
-                defaultValue={apiKey}
-                id="api-key-input"
-              />
-              <p className="form-text">
-                To use CivicAI, you need a free Gemini API key. 
-                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" style={{marginLeft: '4px'}}>
-                  Get one here.
-                </a>
-              </p>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Model Selection</label>
-              <select 
-                className="form-input" 
-                value={modelName} 
-                onChange={(e) => setModelName(e.target.value)}
-              >
-                <option value="models/gemini-1.5-flash">gemini-1.5-flash (Fastest)</option>
-                <option value="models/gemini-1.5-pro">gemini-1.5-pro (Advanced)</option>
-                <option value="models/gemini-1.5-flash-latest">gemini-1.5-flash-latest</option>
-                <option value="models/gemini-pro">gemini-pro (Legacy)</option>
-              </select>
-              <p className="form-text">Try different models if you encounter 404 errors.</p>
-            </div>
-            
-            <button 
-              className="btn-primary"
-              onClick={() => {
-                const key = document.getElementById('api-key-input').value;
-                if (key.trim()) handleSaveApiKey(key.trim());
-              }}
-            >
-              Save & Continue
-            </button>
-            <button 
-              className="settings-btn" 
-              style={{marginTop: '1rem', justifyContent: 'center'}}
-              onClick={() => setShowSettings(false)}
-            >
-              Use Offline Mode
-            </button>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Ballot Simulator Modal */}
-      <AnimatePresence>
-        {showSimulator && (
-          <BallotSimulator onClose={() => setShowSimulator(false)} />
-        )}
-      </AnimatePresence>
-    </div>
+        </AnimatePresence>
+      </div>
+    </Router>
   );
 }
-
-export default App;
