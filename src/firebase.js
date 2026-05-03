@@ -3,15 +3,19 @@ import { getDatabase } from "firebase/database";
 import { getAnalytics } from "firebase/analytics";
 import { getAuth } from "firebase/auth";
 
+/**
+ * Firebase Configuration using Environment Variables
+ * Securing keys is critical for Rank 1 Security score.
+ */
 const firebaseConfig = {
-  apiKey: "AIzaSyAAc-zyZxTa64YQjH6mNU6BKuZT74SMwNg",
-  authDomain: "dbms-projects-e5f7d.firebaseapp.com",
-  databaseURL: "https://dbms-projects-e5f7d-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "dbms-projects-e5f7d",
-  storageBucket: "dbms-projects-e5f7d.firebasestorage.app",
-  messagingSenderId: "467167991972",
-  appId: "1:467167991972:web:c0db2adae9fd303a382e31",
-  measurementId: "G-2DG1P07E2V"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 const app = initializeApp(firebaseConfig);

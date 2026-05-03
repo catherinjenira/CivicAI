@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { 
   X, Settings, Key, Globe, LayoutDashboard, 
@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 // Firebase
 import { db, auth } from './firebase';
-import { ref, push, onValue, set } from 'firebase/database';
+import { ref, push, onValue } from 'firebase/database';
 
 // Layout & Pages
 import Sidebar from './layouts/Sidebar';
@@ -23,15 +23,22 @@ import Login from './pages/Login';
 import { getMockResponse } from './mockData';
 import './App.css';
 
+/**
+ * System instruction for Gemini to maintain non-partisan educational persona.
+ */
 const SYSTEM_INSTRUCTION = `You are CivicAI, a smart, dynamic assistant dedicated to election process education. 
 Your goal is to provide non-partisan, factual, and neutral information about voting, registration, and civic duties.
 Always encourage civic participation without favoring any specific party or candidate.`;
 
+/**
+ * Main Application Component
+ * Handles Global State, Authentication, and AI Logic.
+ */
 export default function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [apiKey, setApiKey] = useState(localStorage.getItem('VITE_GEMINI_API_KEY') || '');
-  const [showSettings, setShowSettings] = useState(!localStorage.getItem('VITE_GEMINI_API_KEY'));
+  const [apiKey, setApiKey] = useState(import.meta.env.VITE_GEMINI_API_KEY || localStorage.getItem('VITE_GEMINI_API_KEY') || '');
+  const [showSettings, setShowSettings] = useState(false);
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -41,6 +48,7 @@ export default function App() {
 
   const recognitionRef = useRef(null);
 
+  // Authentication Listener
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((u) => {
       setUser(u);
@@ -49,13 +57,18 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Data Syncing
   useEffect(() => {
-    if (user && apiKey) {
+    if (user) {
       fetchDailyFact(apiKey);
       syncMessagesWithFirebase(user.uid);
     }
   }, [user, apiKey]);
 
+  /**
+   * Syncs chat messages with Firebase Realtime Database.
+   * @param {string} uid - The user's unique identifier.
+   */
   const syncMessagesWithFirebase = (uid) => {
     const chatRef = ref(db, `chats/${uid}`);
     onValue(chatRef, (snapshot) => {
@@ -70,6 +83,10 @@ export default function App() {
     });
   };
 
+  /**
+   * Fetches a fascinating civic fact using Gemini 1.5 Flash.
+   * Falls back to hardcoded fact if API is unavailable.
+   */
   const fetchDailyFact = async (key) => {
     if (!key) {
       setDailyFact("In Ancient Greece, citizens used broken pottery to vote.");
@@ -82,11 +99,14 @@ export default function App() {
       const result = await model.generateContent(prompt);
       setDailyFact(result.response.text());
     } catch (error) {
-      console.error('Fact fetch failed:', error);
       setDailyFact("In Ancient Greece, citizens used broken pottery to vote.");
     }
   };
 
+  /**
+   * Handles sending messages to Gemini AI with graceful fallback.
+   * @param {string} text - User input text.
+   */
   const handleSend = async (text) => {
     if (!text.trim() || !user) return;
 
@@ -97,7 +117,7 @@ export default function App() {
     try {
       push(chatRef, userMsg);
     } catch (fbError) {
-      console.warn('Firebase push failed');
+      console.warn('Firebase sync failed');
     }
 
     setIsLoading(true);
@@ -123,7 +143,7 @@ export default function App() {
       try {
         push(chatRef, aiMsg);
       } catch (fbError) {
-        console.warn('Firebase push failed');
+        console.warn('Firebase sync failed');
       }
     } catch (error) {
       const mockText = getMockResponse(text);
@@ -134,6 +154,9 @@ export default function App() {
     }
   };
 
+  /**
+   * Toggles Web Speech API for voice input.
+   */
   const toggleListening = () => {
     if (isListening) {
       recognitionRef.current?.stop();
@@ -167,7 +190,13 @@ export default function App() {
   };
 
   if (authLoading) {
-    return <div className="loading-screen"><div className="typing-indicator"><span></span><span></span><span></span></div></div>;
+    return (
+      <div className="loading-screen" aria-live="polite">
+        <div className="typing-indicator" aria-label="Loading CivicAI Content">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+    );
   }
 
   if (!user) {
@@ -184,7 +213,7 @@ export default function App() {
           setShowSettings={setShowSettings} 
         />
         
-        <main className="app-main">
+        <main className="app-main" role="main">
           <Routes>
             <Route path="/" element={<Dashboard dailyFact={dailyFact} />} />
             <Route path="/assistant" element={
@@ -202,13 +231,14 @@ export default function App() {
             } />
             <Route path="/practice" element={<Practice />} />
             <Route path="/resources" element={<Resources />} />
-            <Route path="/login" element={<Login />} />
+            <Route path="/login" element={<Navigate to="/" />} />
+            <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </main>
 
         <AnimatePresence>
           {showSettings && (
-            <div className="modal-overlay">
+            <div className="modal-overlay" role="dialog" aria-labelledby="modal-title">
               <motion.div 
                 className="modal-content"
                 initial={{ scale: 0.9, opacity: 0 }}
@@ -216,27 +246,55 @@ export default function App() {
                 exit={{ scale: 0.9, opacity: 0 }}
               >
                 <div className="modal-header">
-                  <h2 className="modal-title"><Key size={24} color="var(--primary)" /> API Config</h2>
-                  {apiKey && <button className="close-btn" onClick={() => setShowSettings(false)}><X size={24} /></button>}
+                  <h2 id="modal-title" className="modal-title">
+                    <Key size={24} color="var(--primary)" aria-hidden="true" /> API Config
+                  </h2>
+                  <button 
+                    className="close-btn" 
+                    onClick={() => setShowSettings(false)}
+                    aria-label="Close Settings"
+                  >
+                    <X size={24} />
+                  </button>
                 </div>
                 
                 <div className="form-group">
-                  <label className="form-label">Gemini API Key</label>
-                  <input type="password" id="api-key-input" className="form-input" defaultValue={apiKey} placeholder="AIzaSy..." />
+                  <label className="form-label" htmlFor="api-key-input">Gemini API Key</label>
+                  <input 
+                    type="password" 
+                    id="api-key-input" 
+                    className="form-input" 
+                    defaultValue={apiKey} 
+                    placeholder="AIzaSy..." 
+                  />
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Model Selection</label>
-                  <select className="form-input" value={modelName} onChange={(e) => setModelName(e.target.value)}>
+                  <label className="form-label" htmlFor="model-select">Model Selection</label>
+                  <select 
+                    id="model-select"
+                    className="form-input" 
+                    value={modelName} 
+                    onChange={(e) => setModelName(e.target.value)}
+                  >
                     <option value="models/gemini-1.5-flash">gemini-1.5-flash (Fast)</option>
                     <option value="models/gemini-pro">gemini-pro (Stable)</option>
                   </select>
                 </div>
                 
-                <button className="btn-primary" onClick={() => handleSaveApiKey(document.getElementById('api-key-input').value)}>
+                <button 
+                  className="btn-primary" 
+                  onClick={() => handleSaveApiKey(document.getElementById('api-key-input').value)}
+                  aria-label="Save API Configuration"
+                >
                   Save & Continue
                 </button>
-                <button className="settings-btn" style={{marginTop: '1rem', width: '100%', justifyContent: 'center'}} onClick={() => setShowSettings(false)}>
+                <button 
+                  className="settings-btn" 
+                  style={{marginTop: '1rem', width: '100%', justifyContent: 'center'}} 
+                  onClick={() => setShowSettings(false)}
+                  aria-label="Continue with Offline Mode"
+                >
                   Skip for Offline Mode
                 </button>
               </motion.div>
