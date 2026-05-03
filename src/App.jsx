@@ -142,15 +142,22 @@ function App() {
       setMessages((prev) => [...prev, newAiMessage]);
     } catch (error) {
       console.error('Error calling Gemini API, falling back to mock:', error);
-      const mockText = getMockResponse(text);
-      const fallbackMessage = { 
-        id: Date.now() + 1, 
-        role: 'model', 
-        text: `*(CivicAI Offline Fallback)*\n\n${mockText}\n\n*Note: To get advanced AI responses, please configure a working Gemini API key.*` 
-      };
-      setMessages((prev) => [...prev, fallbackMessage]);
+      
+      // Simulate AI thinking time even in mock mode
+      setTimeout(() => {
+        const mockText = getMockResponse(text);
+        const fallbackMessage = { 
+          id: Date.now() + 1, 
+          role: 'model', 
+          text: `*(CivicAI Offline Fallback)*\n\n${mockText}\n\n*Note: To get advanced AI responses, please configure a working Gemini API key.*` 
+        };
+        setMessages((prev) => [...prev, fallbackMessage]);
+        setIsLoading(false);
+      }, 1000);
+      return; // Prevent isLoading from being set to false immediately
     } finally {
-      setIsLoading(false);
+      // Only set to false here if the try block succeeded. 
+      // If catch block runs, setTimeout handles it.
     }
   };
 
