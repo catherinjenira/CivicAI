@@ -5,6 +5,7 @@ import {
   Send, Bot, User, Menu, X, Settings, PlusCircle, 
   MessageSquare, FileText, MapPin, CheckSquare, Key
 } from 'lucide-react';
+import VoterChecklist from './components/VoterChecklist';
 import './App.css';
 
 const SYSTEM_INSTRUCTION = `You are CivicAI, a smart, dynamic assistant dedicated to election process education. 
@@ -120,7 +121,7 @@ function App() {
             <Bot size={24} />
           </div>
           <span className="sidebar-title">CivicAI</span>
-          <button className="menu-btn" onClick={() => setSidebarOpen(false)} style={{marginLeft: 'auto'}}>
+          <button className="menu-btn" aria-label="Close menu" onClick={() => setSidebarOpen(false)} style={{marginLeft: 'auto'}}>
             <X size={24} />
           </button>
         </div>
@@ -147,6 +148,8 @@ function App() {
               </button>
             ))}
           </div>
+          
+          <VoterChecklist />
         </div>
 
         <div className="sidebar-footer">
@@ -160,7 +163,7 @@ function App() {
       {/* Main Content */}
       <main className="main-content">
         <header className="header">
-          <button className="menu-btn" onClick={() => setSidebarOpen(true)}>
+          <button className="menu-btn" aria-label="Open menu" onClick={() => setSidebarOpen(true)}>
             <Menu size={24} />
           </button>
           {!sidebarOpen && <span className="sidebar-title" style={{ display: 'none' }} >CivicAI</span>}
@@ -248,6 +251,7 @@ function App() {
             />
             <button 
               className="send-btn" 
+              aria-label="Send message"
               onClick={() => handleSend()}
               disabled={!input.trim() || isLoading}
             >
@@ -267,7 +271,7 @@ function App() {
                 Configuration
               </h2>
               {apiKey && (
-                <button className="close-btn" onClick={() => setShowSettings(false)}>
+                <button className="close-btn" aria-label="Close settings" onClick={() => setShowSettings(false)}>
                   <X size={24} />
                 </button>
               )}
