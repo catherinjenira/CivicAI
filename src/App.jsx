@@ -8,7 +8,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Firebase
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { ref, push, onValue, set } from 'firebase/database';
 
 // Layout & Pages

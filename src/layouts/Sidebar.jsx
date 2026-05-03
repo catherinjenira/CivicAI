@@ -1,3 +1,4 @@
+import { NavLink } from 'react-router-dom';
 import { 
   LayoutDashboard, MessageSquare, BookOpen, 
   Gamepad2, Settings, Globe, LogOut, User 
