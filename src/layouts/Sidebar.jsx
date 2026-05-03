@@ -1,12 +1,18 @@
-import { NavLink } from 'react-router-dom';
 import { 
   LayoutDashboard, MessageSquare, BookOpen, 
-  Gamepad2, Settings, Globe, LogOut 
+  Gamepad2, Settings, Globe, LogOut, User 
 } from 'lucide-react';
+import { auth } from '../firebase';
 import VoterChecklist from '../components/VoterChecklist';
 import './Sidebar.css';
 
-export default function Sidebar({ language, setLanguage, setShowSettings }) {
+export default function Sidebar({ user, language, setLanguage, setShowSettings }) {
+  const handleLogout = () => {
+    if (window.confirm('Are you sure you want to logout?')) {
+      auth.signOut();
+    }
+  };
+
   return (
     <aside className="app-sidebar">
       <div className="sidebar-header">
@@ -55,6 +61,19 @@ export default function Sidebar({ language, setLanguage, setShowSettings }) {
           <Settings size={20} />
           <span>API Settings</span>
         </button>
+        
+        <div className="user-profile">
+          <div className="user-avatar">
+            <User size={16} />
+          </div>
+          <div className="user-info">
+            <span className="user-name">{user.isAnonymous ? 'Demo User' : user.email.split('@')[0]}</span>
+            <span className="user-status">Online</span>
+          </div>
+          <button className="logout-btn" onClick={handleLogout} title="Logout">
+            <LogOut size={18} />
+          </button>
+        </div>
       </div>
     </aside>
   );

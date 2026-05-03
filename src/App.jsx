@@ -17,6 +17,7 @@ import Dashboard from './pages/Dashboard';
 import Assistant from './pages/Assistant';
 import Practice from './pages/Practice';
 import Resources from './pages/Resources';
+import Login from './pages/Login';
 
 // Components & Utils
 import { getMockResponse } from './mockData';
@@ -27,6 +28,8 @@ Your goal is to provide non-partisan, factual, and neutral information about vot
 Always encourage civic participation without favoring any specific party or candidate.`;
 
 export default function App() {
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [apiKey, setApiKey] = useState(localStorage.getItem('VITE_GEMINI_API_KEY') || '');
   const [showSettings, setShowSettings] = useState(!localStorage.getItem('VITE_GEMINI_API_KEY'));
   const [messages, setMessages] = useState([]);
@@ -39,14 +42,22 @@ export default function App() {
   const recognitionRef = useRef(null);
 
   useEffect(() => {
-    fetchDailyFact(apiKey);
-    if (apiKey) {
-      syncMessagesWithFirebase();
-    }
-  }, [apiKey]);
+    const unsubscribe = auth.onAuthStateChanged((u) => {
+      setUser(u);
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
-  const syncMessagesWithFirebase = () => {
-    const chatRef = ref(db, 'chats/user1'); // Using static ID for demo
+  useEffect(() => {
+    if (user && apiKey) {
+      fetchDailyFact(apiKey);
+      syncMessagesWithFirebase(user.uid);
+    }
+  }, [user, apiKey]);
+
+  const syncMessagesWithFirebase = (uid) => {
+    const chatRef = ref(db, `chats/${uid}`);
     onValue(chatRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -77,10 +88,10 @@ export default function App() {
   };
 
   const handleSend = async (text) => {
-    if (!text.trim()) return;
+    if (!text.trim() || !user) return;
 
     const userMsg = { id: Date.now(), role: 'user', text };
-    const chatRef = ref(db, 'chats/user1');
+    const chatRef = ref(db, `chats/${user.uid}`);
     
     try {
       push(chatRef, userMsg);
@@ -160,10 +171,19 @@ export default function App() {
     setShowSettings(false);
   };
 
+  if (authLoading) {
+    return <div className="loading-screen"><div className="typing-indicator"><span></span><span></span><span></span></div></div>;
+  }
+
+  if (!user) {
+    return <Login />;
+  }
+
   return (
     <Router>
       <div className="app-shell">
         <Sidebar 
+          user={user}
           language={language} 
           setLanguage={setLanguage} 
           setShowSettings={setShowSettings} 
