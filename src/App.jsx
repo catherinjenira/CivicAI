@@ -39,8 +39,8 @@ export default function App() {
   const recognitionRef = useRef(null);
 
   useEffect(() => {
+    fetchDailyFact(apiKey);
     if (apiKey) {
-      fetchDailyFact(apiKey);
       syncMessagesWithFirebase();
     }
   }, [apiKey]);
@@ -60,6 +60,10 @@ export default function App() {
   };
 
   const fetchDailyFact = async (key) => {
+    if (!key) {
+      setDailyFact("In Ancient Greece, citizens used broken pottery to vote.");
+      return;
+    }
     try {
       const genAI = new GoogleGenerativeAI(key);
       const model = genAI.getGenerativeModel({ model: modelName });
@@ -77,7 +81,13 @@ export default function App() {
 
     const userMsg = { id: Date.now(), role: 'user', text };
     const chatRef = ref(db, 'chats/user1');
-    push(chatRef, userMsg);
+    
+    try {
+      push(chatRef, userMsg);
+    } catch (fbError) {
+      console.warn('Firebase push failed, updating local state only:', fbError);
+      setMessages(prev => [...prev, userMsg]);
+    }
 
     setIsLoading(true);
 
@@ -97,7 +107,14 @@ export default function App() {
       const result = await chat.sendMessage(fullPrompt);
       
       const aiMsg = { id: Date.now() + 1, role: 'model', text: result.response.text() };
-      push(chatRef, aiMsg);
+      
+      // Try to sync with Firebase, but don't fail if permissions are denied
+      try {
+        push(chatRef, aiMsg);
+      } catch (fbError) {
+        console.warn('Firebase push failed, updating local state only:', fbError);
+        setMessages(prev => [...prev, aiMsg]);
+      }
     } catch (error) {
       setTimeout(() => {
         const mockText = getMockResponse(text);
