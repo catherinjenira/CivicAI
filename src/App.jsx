@@ -3,7 +3,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import ReactMarkdown from 'react-markdown';
 import { 
   Send, Bot, User, Menu, X, Settings, PlusCircle, 
-  MessageSquare, FileText, MapPin, CheckSquare, Key
+  MessageSquare, FileText, MapPin, CheckSquare, Key,
+  Mic, MicOff, Info
 } from 'lucide-react';
 import VoterChecklist from './components/VoterChecklist';
 import './App.css';
@@ -22,17 +23,67 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [dailyFact, setDailyFact] = useState('');
   
   const chatContainerRef = useRef(null);
+  const recognitionRef = useRef(null);
 
   useEffect(() => {
+    const envKey = import.meta.env.VITE_GEMINI_API_KEY;
     const savedKey = localStorage.getItem('gemini_api_key');
-    if (savedKey) {
+    
+    let activeKey = '';
+    if (envKey) {
+      activeKey = envKey;
+      setApiKey(envKey);
+    } else if (savedKey) {
+      activeKey = savedKey;
       setApiKey(savedKey);
     } else {
       setShowSettings(true);
     }
+
+    if (activeKey) {
+      fetchDailyFact(activeKey);
+    }
+
+    // Initialize Speech Recognition
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = false;
+      recognitionRef.current.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setInput(transcript);
+        setIsListening(false);
+      };
+      recognitionRef.current.onerror = () => setIsListening(false);
+      recognitionRef.current.onend = () => setIsListening(false);
+    }
   }, []);
+
+  const fetchDailyFact = async (key) => {
+    try {
+      const genAI = new GoogleGenerativeAI(key);
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const prompt = "Provide one short, fascinating, and neutral fact about the election process or voting history. Keep it under 100 characters.";
+      const result = await model.generateContent(prompt);
+      setDailyFact(result.response.text());
+    } catch (e) {
+      console.error("Fact fetch failed", e);
+    }
+  };
+
+  const toggleListening = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+    } else {
+      setIsListening(true);
+      recognitionRef.current?.start();
+    }
+  };
 
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -66,7 +117,7 @@ function App() {
     try {
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({ 
-        model: 'gemini-1.5-pro-latest',
+        model: 'gemini-1.5-flash',
         systemInstruction: {
           role: 'system',
           parts: [{ text: SYSTEM_INSTRUCTION }],
@@ -176,6 +227,12 @@ function App() {
                 <Bot size={48} />
               </div>
               <h1 className="welcome-title">Welcome to CivicAI</h1>
+              {dailyFact && (
+                <div className="daily-fact fade-in">
+                  <Info size={16} />
+                  <span><strong>Fact of the Day:</strong> {dailyFact}</span>
+                </div>
+              )}
               <p className="welcome-subtitle">
                 Your smart, unbiased guide to understanding the election process, voter rights, and civic duties.
               </p>
@@ -249,6 +306,13 @@ function App() {
               placeholder="Ask about the election process..."
               rows={1}
             />
+            <button 
+              className={`mic-btn ${isListening ? 'listening' : ''}`}
+              aria-label={isListening ? "Stop listening" : "Start voice input"}
+              onClick={toggleListening}
+            >
+              {isListening ? <MicOff size={20} /> : <Mic size={20} />}
+            </button>
             <button 
               className="send-btn" 
               aria-label="Send message"
